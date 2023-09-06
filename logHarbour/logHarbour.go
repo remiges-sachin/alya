@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"runtime"
 	"strconv"
 )
@@ -96,6 +97,7 @@ type logStruct struct {
 	System      string `json:"system"`
 	Caller      string `json:"caller,omitempty"`
 	CallTrace   string `json:"callTrace,omitempty"`
+	Pid         string `json:"pid,omitempty"`
 	When        string `json:"when"`
 	Who         string `json:"who"`
 	RemoteIp    string `json:"remoteIp"`
@@ -110,11 +112,9 @@ func LogWrite(ll LogLevel, when, who, remoteIp, op, what string, status int, msg
 		var ls logStruct
 		switch ll {
 		case Inf, Err:
-			ls = logStruct{getLogString(ll), app, module, system, "", "", when, who, remoteIp, op, what, status, msg}
-			//fmt.Printf("pri:%s|%s|when:%s|who:%s|remoteIp:%s|op:%s|what:%s|status:%d|msg:%s\n", getLogString(ll), defLogString, when, who, remoteIp, op, what, status, msg)
+			ls = logStruct{getLogString(ll), app, module, system, "", "", "", when, who, remoteIp, op, what, status, msg}
 		case Dbg, Trc:
-			ls = logStruct{getLogString(ll), app, module, system, getCaller(), myCallTrace(), when, who, remoteIp, op, what, status, msg}
-			//fmt.Printf("pri:%s|%s|caller:%s|callTrace:%s|when:%s|who:%s|remoteIp:%s|op:%s|what:%s|status:%d|msg:%s\n", getLogString(ll), defLogString, GetCaller(), MyCallTrace(), when, who, remoteIp, op, what, status, msg)
+			ls = logStruct{getLogString(ll), app, module, system, getCaller(), myCallTrace(), strconv.Itoa(os.Getpid()), when, who, remoteIp, op, what, status, msg}
 		}
 		sendLog(ls)
 	}

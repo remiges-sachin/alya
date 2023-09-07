@@ -6,14 +6,19 @@ import (
 	"log"
 	"os"
 	"runtime"
+	"runtime/debug"
 	"strconv"
+	"time"
 )
 
 var GlobalLogLevel LogLevel
+var goRuntime string
 
 func init() {
 
 	GlobalLogLevel = Inf
+	buildInfo, _ := debug.ReadBuildInfo()
+	goRuntime = buildInfo.GoVersion
 	//foo()
 }
 
@@ -91,13 +96,14 @@ func getLogString(ll LogLevel) string {
 }
 
 type logStruct struct {
-	LogLevelInf string `json:"pri"`
+	LogLevelInf string `json:"pri"` //could be "level" as per convention
 	App         string `json:"app"`
 	Module      string `json:"module"`
 	System      string `json:"system"`
 	Caller      string `json:"caller,omitempty"`
 	CallTrace   string `json:"callTrace,omitempty"`
-	Pid         string `json:"pid,omitempty"`
+	Pid         int    `json:"pid,omitempty"` //assuming pid for golang process can never be 0
+	GoVersion   string `json:"goVersion,omitempty"`
 	When        string `json:"when"`
 	Who         string `json:"who"`
 	RemoteIp    string `json:"remoteIp"`
@@ -105,16 +111,46 @@ type logStruct struct {
 	What        string `json:"what"`
 	Status      int    `json:"status"`
 	Msg         string `json:"msg"`
+	Params      any    `json:"params,omitempty"`
 }
 
-func LogWrite(ll LogLevel, when, who, remoteIp, op, what string, status int, msg string) {
+type DataChg struct {
+	Field  string `json:"field"`
+	OldVal string `json:"oldVal"`
+	NewVal string `json:"newVal"`
+}
+
+func GetDataChg(field, oldVal, newVal string) DataChg {
+	return DataChg{field, oldVal, newVal}
+}
+
+func checkAny(customMsgs ...any) any {
+	if len(customMsgs) > 0 {
+		return customMsgs
+	} else {
+		var emptyInterface interface{}
+		return emptyInterface
+	}
+}
+
+func GetKV(key string, val string) map[string]string {
+	a := map[string]string{key: val}
+	return a
+}
+
+// writes Log.
+// TODO : check for possible sync issues
+func LogWrite(ll LogLevel, when, who, remoteIp, op, what string, status int, msg string, customMsgs ...any) {
 	if shouldPrint(ll) {
+		if when == "" {
+			when = time.Now().UTC().String()
+		}
 		var ls logStruct
 		switch ll {
 		case Inf, Err:
-			ls = logStruct{getLogString(ll), app, module, system, "", "", "", when, who, remoteIp, op, what, status, msg}
+			ls = logStruct{getLogString(ll), app, module, system, "", "", 0, "", when, who, remoteIp, op, what, status, msg, checkAny(customMsgs...)}
 		case Dbg, Trc:
-			ls = logStruct{getLogString(ll), app, module, system, getCaller(), myCallTrace(), strconv.Itoa(os.Getpid()), when, who, remoteIp, op, what, status, msg}
+			ls = logStruct{getLogString(ll), app, module, system, getCaller(), myCallTrace(), os.Getpid(), goRuntime, when, who, remoteIp, op, what, status, msg, checkAny(customMsgs...)}
 		}
 		sendLog(ls)
 	}

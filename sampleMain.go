@@ -8,37 +8,37 @@ import (
 
 func main() {
 	logHarbour.LogInit("sampleApp", "moduleName", "systemName")
-	logHarbour.LogWrite(logHarbour.Trc, time.Now().UTC().String(), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger info message")
+	logHarbour.LogWrite(logHarbour.Inf, time.Now().Format("2006-01-02T15:04:05Z"), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger info message")
 	fmt.Println()
 	firstFunc()
 }
 
 func firstFunc() {
-	logHarbour.GlobalLogLevel = logHarbour.Dbg
-	logHarbour.LogWrite(logHarbour.Inf, time.Now().UTC().String(), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger info firstFunc", logHarbour.GetDataChg("qty", "100", "200"), logHarbour.GetDataChg("qty", "100", "200"))
+	//logHarbour.GlobalLogLevel = logHarbour.Dbg
+	logHarbour.LogWrite(logHarbour.Inf, time.Now().Format("2006-01-02T15:04:05Z"), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger info firstFunc", logHarbour.GetDataChg("qty", "100", "200"), logHarbour.GetDataChg("qty", "100", "200"))
 	fmt.Println()
-	logHarbour.LogWrite(logHarbour.Dbg, time.Now().UTC().String(), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger error firstFunc", logHarbour.GetKV("reqIdCustom", "123123123"), logHarbour.GetKV("otherField", "otherfieldvalue"), logHarbour.GetDataChg("qty", "1", "2"), logHarbour.GetDataChg("amt", "100", "200"))
+	logHarbour.LogWrite(logHarbour.Err, time.Now().Format("2006-01-02T15:04:05Z"), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger error firstFunc", logHarbour.GetKV("reqIdCustom", "123123123"), logHarbour.GetKV("otherField", "otherfieldvalue"), logHarbour.GetDataChg("qty", "1", "2"), logHarbour.GetDataChg("amt", "100", "200"))
 	fmt.Println()
-	logHarbour.LogWrite(logHarbour.Dbg, time.Now().UTC().String(), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger Debug firstFunc", logHarbour.GetDataChg("qty", "100", "200"))
+	logHarbour.LogWrite(logHarbour.Dbg, time.Now().Format("2006-01-02T15:04:05Z"), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger Debug firstFunc", logHarbour.GetDataChg("qty", "100", "200"))
 	fmt.Println()
 	secondFunc()
 }
 
 func secondFunc() {
-	logHarbour.LogWrite(logHarbour.Inf, time.Now().UTC().String(), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger info Second Func")
-	logHarbour.LogWrite(logHarbour.Err, time.Now().UTC().String(), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger error Second Func")
-	logHarbour.LogWrite(logHarbour.Dbg, time.Now().UTC().String(), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger debug Second Func")
-	logHarbour.GlobalLogLevel = logHarbour.Dbg
-	logHarbour.LogWrite(logHarbour.Dbg, time.Now().UTC().String(), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger debug Second Func")
+	logHarbour.LogWrite(logHarbour.Inf, time.Now().Format("2006-01-02T15:04:05Z"), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger info Second Func")
+	logHarbour.LogWrite(logHarbour.Err, time.Now().Format("2006-01-02T15:04:05Z"), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger error Second Func")
+	logHarbour.LogWrite(logHarbour.Dbg, time.Now().Format("2006-01-02T15:04:05Z"), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger debug Second Func")
+	logHarbour.SetGlobalLogLevel(logHarbour.Dbg)
+	logHarbour.LogWrite(logHarbour.Dbg, time.Now().Format("2006-01-02T15:04:05Z"), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger debug Second Func")
 	fmt.Println()
 	thirdFunc()
 }
 
 func thirdFunc() {
-	logHarbour.GlobalLogLevel = logHarbour.Dbg
-	logHarbour.LogWrite(logHarbour.Inf, time.Now().UTC().String(), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger info Third Func")
-	logHarbour.LogWrite(logHarbour.Err, time.Now().UTC().String(), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger error Third Func")
-	logHarbour.LogWrite(logHarbour.Dbg, time.Now().UTC().String(), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger debug Third Func")
+	logHarbour.SetGlobalLogLevel(logHarbour.Err)
+	logHarbour.LogWrite(logHarbour.Inf, time.Now().Format("2006-01-02T15:04:05Z"), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger info Third Func")
+	logHarbour.LogWrite(logHarbour.Err, time.Now().Format("2006-01-02T15:04:05Z"), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger error Third Func")
+	logHarbour.LogWrite(logHarbour.Dbg, time.Now().Format("2006-01-02T15:04:05Z"), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger debug Third Func")
 }
 
 /* output:

@@ -8,18 +8,44 @@ import (
 	"runtime"
 	"runtime/debug"
 	"strconv"
+	"sync/atomic"
 	"time"
 )
 
-var GlobalLogLevel LogLevel
+// log level to print. Will be used while printing of log messages to a defined output
+var globalLogLevel int64
+
+func SetGlobalLogLevel(ll LogLevel) {
+	atomic.StoreInt64(&globalLogLevel, int64(ll))
+}
+
+// go runtime version
 var goRuntime string
 
-func init() {
+type logIdentity struct {
+	App    string `json:"app"`
+	Module string `json:"module"`
+	System string `json:"system"`
+}
 
-	GlobalLogLevel = Inf
+var identity logIdentity
+
+// checks if system is initialized
+var isInitalized bool
+
+// initializes logHarbour with app, module and system names
+func LogInit(appName, moduleName, systemName string) {
+	//will allow initialization only once
+	if !isInitalized {
+		identity = logIdentity{appName, moduleName, systemName}
+		isInitalized = true
+	}
+}
+
+func init() {
+	atomic.StoreInt64(&globalLogLevel, int64(Inf))
 	buildInfo, _ := debug.ReadBuildInfo()
 	goRuntime = buildInfo.GoVersion
-	//foo()
 }
 
 func getFrame(skipFrames int) runtime.Frame {
@@ -45,12 +71,13 @@ func getFrame(skipFrames int) runtime.Frame {
 	return frame
 }
 
-// MyCaller returns the caller of the function that called it :)
-func myCallTrace() string {
+// getCallTrace returns the caller of the function that called it :)
+func getCallTrace() string {
 	// Skip GetCallerFunctionName and the function to get the caller of
 	return getFrame(2).Function
 }
 
+// getCaller() returns the file and line no from where the func is called
 func getCaller() string {
 	_, file, line, _ := runtime.Caller(2)
 	short := file
@@ -64,8 +91,18 @@ func getCaller() string {
 	return file + ":" + strconv.Itoa(line)
 }
 
-type LogLevel int
+// struct to write debug info to log messages
+type debugInfo struct {
+	Caller    string `json:"caller,omitempty"`
+	CallTrace string `json:"callTrace,omitempty"`
+	Pid       int    `json:"pid,omitempty"`
+	GoVersion string `json:"goVersion,omitempty"`
+}
 
+// log level
+type LogLevel int64
+
+// log level constants
 const (
 	Inf LogLevel = 1
 	Err LogLevel = 2
@@ -73,13 +110,15 @@ const (
 	Trc LogLevel = -1
 )
 
+// func checks log level and returns a bool confirming whether the statement should actually be logged or not.
 func shouldPrint(logLevel LogLevel) bool {
 	if isInitalized {
-		return logLevel >= GlobalLogLevel
+		return int64(logLevel) >= globalLogLevel
 	}
 	return false
 }
 
+// func returns a string based on log level
 func getLogString(ll LogLevel) string {
 	switch ll {
 	case Inf:
@@ -95,35 +134,34 @@ func getLogString(ll LogLevel) string {
 	}
 }
 
-type logStruct struct {
+// struct for logging messages
+type logMsg struct {
 	LogLevelInf string `json:"pri"` //could be "level" as per convention
-	App         string `json:"app"`
-	Module      string `json:"module"`
-	System      string `json:"system"`
-	Caller      string `json:"caller,omitempty"`
-	CallTrace   string `json:"callTrace,omitempty"`
-	Pid         int    `json:"pid,omitempty"` //assuming pid for golang process can never be 0
-	GoVersion   string `json:"goVersion,omitempty"`
-	When        string `json:"when"`
-	Who         string `json:"who"`
-	RemoteIp    string `json:"remoteIp"`
-	Op          string `json:"op"`
-	What        string `json:"what"`
-	Status      int    `json:"status"`
-	Msg         string `json:"msg"`
-	Params      any    `json:"params,omitempty"`
+	logIdentity
+	debugInfo
+	When     string `json:"when"`
+	Who      string `json:"who"`
+	RemoteIp string `json:"remoteIp"`
+	Op       string `json:"op"`
+	What     string `json:"what"`
+	Status   int    `json:"status"`
+	Msg      string `json:"msg"`
+	Params   any    `json:"params,omitempty"`
 }
 
-type DataChg struct {
+// struct for managing data change objects
+type dataChg struct {
 	Field  string `json:"field"`
 	OldVal string `json:"oldVal"`
 	NewVal string `json:"newVal"`
 }
 
-func GetDataChg(field, oldVal, newVal string) DataChg {
-	return DataChg{field, oldVal, newVal}
+// func returns data change object
+func GetDataChg(field, oldVal, newVal string) dataChg {
+	return dataChg{field, oldVal, newVal}
 }
 
+// creates an empty interface if nothing is passed to the variadic function. This is imp so that the json parser skips the "params" tag while creating the message
 func checkAny(customMsgs ...any) any {
 	if len(customMsgs) > 0 {
 		return customMsgs
@@ -133,6 +171,7 @@ func checkAny(customMsgs ...any) any {
 	}
 }
 
+// func returns a key:value map for printing a json
 func GetKV(key string, val string) map[string]string {
 	a := map[string]string{key: val}
 	return a
@@ -141,41 +180,32 @@ func GetKV(key string, val string) map[string]string {
 // writes Log.
 // TODO : check for possible sync issues
 func LogWrite(ll LogLevel, when, who, remoteIp, op, what string, status int, msg string, customMsgs ...any) {
+	if !isInitalized {
+		log.Fatalf("logHarbour not initialized. callTrace[%s]. caller[%s]\n", getCallTrace(), getCaller())
+	}
 	if shouldPrint(ll) {
+		//if no time is passed, it'll print time of printing the log
 		if when == "" {
-			when = time.Now().UTC().String()
+			when = time.Now().Format("2006-01-02T15:04:05Z")
 		}
-		var ls logStruct
+		var lm logMsg
 		switch ll {
 		case Inf, Err:
-			ls = logStruct{getLogString(ll), app, module, system, "", "", 0, "", when, who, remoteIp, op, what, status, msg, checkAny(customMsgs...)}
+			lm = logMsg{getLogString(ll), identity, debugInfo{}, when, who, remoteIp, op, what, status, msg, checkAny(customMsgs...)}
 		case Dbg, Trc:
-			ls = logStruct{getLogString(ll), app, module, system, getCaller(), myCallTrace(), os.Getpid(), goRuntime, when, who, remoteIp, op, what, status, msg, checkAny(customMsgs...)}
+			lm = logMsg{getLogString(ll), identity, debugInfo{getCaller(), getCallTrace(), os.Getpid(), goRuntime}, when, who, remoteIp, op, what, status, msg, checkAny(customMsgs...)}
 		}
-		sendLog(ls)
+		sendLog(lm)
 	}
 }
 
 // this func decides where to send logs
 // TODO: create io function to write to output(file/port etc)
-func sendLog(ls logStruct) {
+// TODO: check for possible sync issues
+func sendLog(ls logMsg) {
 	json_data, err := json.Marshal(ls)
 	if err != nil {
-		log.Fatal("err:", err)
+		log.Fatalf("Error while encoding to json msg[%v]: \nError: %v \n", ls, err)
 	}
 	fmt.Println(string(json_data))
-}
-
-var app string
-var module string
-var system string
-var isInitalized bool
-
-func LogInit(appName, moduleName, systemName string) {
-	if !isInitalized {
-		app = appName
-		module = moduleName
-		system = systemName
-		isInitalized = true
-	}
 }

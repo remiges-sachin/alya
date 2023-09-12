@@ -1,3 +1,4 @@
+// logHarbour is logging framework from remiges.tech
 package logHarbour
 
 import (
@@ -15,6 +16,7 @@ import (
 // log level to print. Will be used while printing of log messages to a defined output
 var globalLogLevel int64
 
+// func sets global log level to level passed as argument
 func SetGlobalLogLevel(ll LogLevel) {
 	atomic.StoreInt64(&globalLogLevel, int64(ll))
 }
@@ -22,13 +24,13 @@ func SetGlobalLogLevel(ll LogLevel) {
 // go runtime version
 var goRuntime string
 
-type logIdentity struct {
+type appIdentifier struct {
 	App    string `json:"app"`
 	Module string `json:"module"`
 	System string `json:"system"`
 }
 
-var identity logIdentity
+var identity appIdentifier
 
 // checks if system is initialized
 var isInitalized bool
@@ -37,13 +39,13 @@ var isInitalized bool
 func LogInit(appName, moduleName, systemName string) {
 	//will allow initialization only once
 	if !isInitalized {
-		identity = logIdentity{appName, moduleName, systemName}
+		identity = appIdentifier{appName, moduleName, systemName}
 		isInitalized = true
 	}
 }
 
 func init() {
-	atomic.StoreInt64(&globalLogLevel, int64(Inf))
+	SetGlobalLogLevel(Inf)
 	buildInfo, _ := debug.ReadBuildInfo()
 	goRuntime = buildInfo.GoVersion
 }
@@ -93,7 +95,7 @@ func getCaller() string {
 
 // struct to write debug info to log messages
 type debugInfo struct {
-	Caller    string `json:"caller,omitempty"`
+	Caller    string `json:"source,omitempty"`
 	CallTrace string `json:"callTrace,omitempty"`
 	Pid       int    `json:"pid,omitempty"`
 	GoVersion string `json:"goVersion,omitempty"`
@@ -137,16 +139,18 @@ func getLogString(ll LogLevel) string {
 // struct for logging messages
 type logMsg struct {
 	LogLevelInf string `json:"pri"` //could be "level" as per convention
-	logIdentity
+	appIdentifier
 	debugInfo
-	When     string `json:"when"`
-	Who      string `json:"who"`
-	RemoteIp string `json:"remoteIp"`
-	Op       string `json:"op"`
-	What     string `json:"what"`
-	Status   int    `json:"status"`
-	Msg      string `json:"msg"`
-	Params   any    `json:"params,omitempty"`
+	SpanId        string `json:"spanId"`
+	CorrelationId string `json:"correlationId"`
+	When          string `json:"when"`
+	Who           string `json:"who"`
+	RemoteIp      string `json:"remoteIp"`
+	Op            string `json:"op"`
+	What          string `json:"what"`
+	Status        int    `json:"status"`
+	Msg           string `json:"msg"`
+	Params        any    `json:"params,omitempty"`
 }
 
 // struct for managing data change objects
@@ -161,6 +165,12 @@ func GetDataChg(field, oldVal, newVal string) dataChg {
 	return dataChg{field, oldVal, newVal}
 }
 
+// func returns a key:value map for printing a json
+func GetKV(key string, val string) map[string]string {
+	a := map[string]string{key: val}
+	return a
+}
+
 // creates an empty interface if nothing is passed to the variadic function. This is imp so that the json parser skips the "params" tag while creating the message
 func checkAny(customMsgs ...any) any {
 	if len(customMsgs) > 0 {
@@ -171,17 +181,11 @@ func checkAny(customMsgs ...any) any {
 	}
 }
 
-// func returns a key:value map for printing a json
-func GetKV(key string, val string) map[string]string {
-	a := map[string]string{key: val}
-	return a
-}
-
 // writes Log.
 // TODO : check for possible sync issues
-func LogWrite(ll LogLevel, when, who, remoteIp, op, what string, status int, msg string, customMsgs ...any) {
+func LogWrite(ll LogLevel, spanId, correlationId, when, who, remoteIp, op, what string, status int, msg string, customMsgs ...any) {
 	if !isInitalized {
-		log.Fatalf("logHarbour not initialized. callTrace[%s]. caller[%s]\n", getCallTrace(), getCaller())
+		log.Fatalf("logHarbour not initialized. source[%s]. caller[%s]\n", getCallTrace(), getCaller())
 	}
 	if shouldPrint(ll) {
 		//if no time is passed, it'll print time of printing the log
@@ -191,9 +195,9 @@ func LogWrite(ll LogLevel, when, who, remoteIp, op, what string, status int, msg
 		var lm logMsg
 		switch ll {
 		case Inf, Err:
-			lm = logMsg{getLogString(ll), identity, debugInfo{}, when, who, remoteIp, op, what, status, msg, checkAny(customMsgs...)}
+			lm = logMsg{getLogString(ll), identity, debugInfo{}, spanId, correlationId, when, who, remoteIp, op, what, status, msg, checkAny(customMsgs...)}
 		case Dbg, Trc:
-			lm = logMsg{getLogString(ll), identity, debugInfo{getCaller(), getCallTrace(), os.Getpid(), goRuntime}, when, who, remoteIp, op, what, status, msg, checkAny(customMsgs...)}
+			lm = logMsg{getLogString(ll), identity, debugInfo{getCaller(), getCallTrace(), os.Getpid(), goRuntime}, spanId, correlationId, when, who, remoteIp, op, what, status, msg, checkAny(customMsgs...)}
 		}
 		sendLog(lm)
 	}
@@ -209,3 +213,6 @@ func sendLog(ls logMsg) {
 	}
 	fmt.Println(string(json_data))
 }
+
+//slog : structured log
+// loggger handler

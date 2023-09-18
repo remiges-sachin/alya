@@ -95,7 +95,6 @@ func LogInit(appName, moduleName, systemName string) LogHandles {
 		identity = appIdentifier{appName, moduleName, systemName}
 		isInitalized = true
 	}
-
 	return getLogger()
 }
 func getLogFileName() string {
@@ -128,9 +127,9 @@ func getLogFileFormat(s string) string {
 // If the Key of the parameter is equal to slog.LevelKey, it handles custom level values and returns the modified slog.Attr object.
 // Otherwise, it returns the original slog.Attr object.
 func manageAttributes(a slog.Attr) slog.Attr {
-	if a.Key == slog.TimeKey {
+	/*if a.Key == slog.TimeKey {
 		return slog.Attr{}
-	}
+	}*/
 	// Customize the name of the level key and the output string, including
 	// custom level values.
 	if a.Key == slog.LevelKey {
@@ -164,36 +163,33 @@ func getLogLevelString(level slog.Level) (levelString slog.Value) {
 	return
 }
 
+var loggerSet LogHandles
+var loggerSetInitialized = false
+
 // func returns 3 logHandles for ActivityLog, DatachangeLog and DebugLog
 func getLogger() LogHandles {
-	logFile, err := os.OpenFile(getLogFileName(), os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
-	if err != nil {
-		panic(err)
+	if !loggerSetInitialized {
+		logFile, err := os.OpenFile(getLogFileName(), os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
+		if err != nil {
+			panic(err)
+		}
+		mw := io.MultiWriter(os.Stdout, logFile)
+
+		lg := slog.New(slog.NewJSONHandler(mw, &slog.HandlerOptions{Level: programLevel, ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			return manageAttributes(a)
+		}})).With("app", identity.App).With("module", identity.Module).With("system", identity.System)
+
+		loggerSet = LogHandles{
+			ActivityLogger:   lg.With("handle", ACTIVITY_LOGGER),
+			DataChangeLogger: lg.With("handle", DATACHANGE_LOGGER),
+			DebugLogger:      lg.With("handle", DEBUG_LOGGER).With(slog.Int("pid", os.Getpid())).With(slog.String("goVersion", goRuntime))}
 	}
-	mw := io.MultiWriter(os.Stdout, logFile)
-
-	lg := slog.New(slog.NewJSONHandler(mw, &slog.HandlerOptions{Level: programLevel, ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-		return manageAttributes(a)
-	}})).With("app", identity.App).With("module", identity.Module).With("system", identity.System)
-
-	return LogHandles{lg.With("handle", ACTIVITY_LOGGER),
-		lg.With("handle", DATACHANGE_LOGGER),
-		lg.With("handle", DEBUG_LOGGER).With("pid", os.Getpid()).With("goVersion", goRuntime)}
+	return loggerSet
 }
 
 // func returns data change object
 func GetDataChg(field, oldVal, newVal string) DataChg {
 	return DataChg{field, oldVal, newVal}
-}
-
-// LogValue implements slog.LogValuer.
-// It returns a group containing the fields of
-// the Name, so that they appear together in the log output.
-func (dc DataChg) LogValue() slog.Value {
-	return slog.GroupValue(
-		slog.String("field", dc.Field),
-		slog.String("oldVal", dc.OldVal),
-		slog.String("newVal", dc.NewVal))
 }
 
 // getFrame returns the runtime.Frame at the specified index.
@@ -265,8 +261,8 @@ func LogWrite(lgger *slog.Logger, ll slog.Level, spanId, correlationId, when, wh
 
 	if ll <= LevelDebug {
 		// In case of level of type Debug, additional information is passed to loggers
-		lgger.Log(ctx, ll, msg, "source", getCaller(), "callTrace", getCallTrace(), "spanId", spanId, "correlationId", correlationId, "when", when, "who", who, "remoteIp", remoteIp, "op", op, "what", what, "status", status, checkCustomMsg(customMsgs...))
+		lgger.Log(ctx, ll, msg, slog.String("source", getCaller()), slog.String("callTrace", getCallTrace()), slog.String("spanId", spanId), slog.String("correlationId", correlationId), slog.String("when", when), slog.String("who", who), slog.String("remoteIp", remoteIp), slog.String("op", op), slog.String("what", what), slog.Int("status", status), checkCustomMsg(customMsgs...))
 	} else {
-		lgger.Log(ctx, ll, msg, "spanId", spanId, "correlationId", correlationId, "when", when, "who", who, "remoteIp", remoteIp, "op", op, "what", what, "status", status, checkCustomMsg(customMsgs...))
+		lgger.Log(ctx, ll, msg, slog.String("spanId", spanId), slog.String("correlationId", correlationId), slog.String("when", when), slog.String("who", who), slog.String("remoteIp", remoteIp), slog.String("op", op), slog.String("what", what), slog.Int("status", status), checkCustomMsg(customMsgs...))
 	}
 }

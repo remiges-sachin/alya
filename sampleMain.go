@@ -25,7 +25,6 @@ func main() {
 	fmt.Println("---------------------------")
 	fmt.Println("---------------------------")
 	firstFunc(loggers)
-	//main2()
 }
 
 func firstFunc(loggers logHarbour.LogHandles) {
@@ -36,24 +35,4 @@ func firstFunc(loggers logHarbour.LogHandles) {
 	fmt.Println()
 	logHarbour.LogWrite(loggers.DebugLogger, logHarbour.LevelDebug1, "spanid14", "correlationid14", time.Now().Format(timeFormat), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger Debug firstFunc", logHarbour.GetDataChg("qty", "100", "200"))
 	fmt.Println()
-	//secondFunc()
 }
-
-/*
-func secondFunc() {
-	logHarbour.LogWrite(logHarbour.Inf, "spanid15", "correlationid15", time.Now().Format(timeFormat), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger info Second Func")
-	logHarbour.LogWrite(logHarbour.Err, "spanid16", "correlationid16", time.Now().Format(timeFormat), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger error Second Func")
-	logHarbour.LogWrite(logHarbour.Dbg, "spanid17", "correlationid17", time.Now().Format(timeFormat), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger debug Second Func")
-	logHarbour.SetGlobalLogLevel(logHarbour.Dbg)
-	logHarbour.LogWrite(logHarbour.Dbg, "spanid18", "correlationid18", time.Now().Format(timeFormat), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger debug Second Func")
-	fmt.Println()
-	thirdFunc()
-}
-
-func thirdFunc() {
-	logHarbour.SetGlobalLogLevel(logHarbour.Err)
-	logHarbour.LogWrite(logHarbour.Inf, "spanid19", "correlationid19", time.Now().Format(timeFormat), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger info Third Func")
-	logHarbour.LogWrite(logHarbour.Err, "spanid20", "correlationid20", time.Now().Format(timeFormat), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger error Third Func")
-	logHarbour.LogWrite(logHarbour.Dbg, "spanid21", "correlationid21", time.Now().Format(timeFormat), "bhavya", "127.0.0.1", "newLog", "NA", 1, "This is an activity logger debug Third Func")
-}
-*/

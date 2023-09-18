@@ -3,6 +3,7 @@ package logHarbour
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"log/slog"
 	"os"
@@ -94,7 +95,30 @@ func LogInit(appName, moduleName, systemName string) LogHandles {
 		identity = appIdentifier{appName, moduleName, systemName}
 		isInitalized = true
 	}
+
 	return getLogger()
+}
+func getLogFileName() string {
+	//TODO: read these parameters from config file
+	filename := "logfile"
+	filepath := "."
+	fileSuffix := "yyyymmdd"
+	fileExtn := ".txt"
+	suffix := time.Now().Format(getLogFileFormat(fileSuffix))
+	return filepath + "/" + filename + "_" + suffix + fileExtn
+}
+
+func getLogFileFormat(s string) string {
+	switch s {
+	case "yyyymmdd":
+		return "20060102"
+	case "ddmmyyyy":
+		return "01022006"
+	case "mmddyyyy":
+		return "02012006"
+	default:
+		return "20060102"
+	}
 }
 
 // manageAttributes is a function that manages the attributes of a slog.Attr object.
@@ -142,7 +166,13 @@ func getLogLevelString(level slog.Level) (levelString slog.Value) {
 
 // func returns 3 logHandles for ActivityLog, DatachangeLog and DebugLog
 func getLogger() LogHandles {
-	lg := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: programLevel, ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+	logFile, err := os.OpenFile(getLogFileName(), os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
+	if err != nil {
+		panic(err)
+	}
+	mw := io.MultiWriter(os.Stdout, logFile)
+
+	lg := slog.New(slog.NewJSONHandler(mw, &slog.HandlerOptions{Level: programLevel, ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 		return manageAttributes(a)
 	}})).With("app", identity.App).With("module", identity.Module).With("system", identity.System)
 

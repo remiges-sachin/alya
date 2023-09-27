@@ -1,8 +1,8 @@
+// logHarbour is the logging framework from remiges.tech
 package logHarbour
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log"
 	"log/slog"
@@ -21,7 +21,7 @@ const (
 	//Log level priority
 	PRI_DEBUG2   = "DEBUG2"
 	PRI_DEBUG1   = "DEBUG1"
-	PRI_DEBUG    = "DEBUG"
+	PRI_DEBUG0   = "DEBUG0"
 	PRI_INFO     = "INFO"
 	PRI_WARN     = "WARN"
 	PRI_ERROR    = "ERROR"
@@ -30,7 +30,7 @@ const (
 	// Log level Constants from a custom logging package.
 	LevelDebug2   = slog.Level(-8)
 	LevelDebug1   = slog.Level(-7)
-	LevelDebug    = slog.LevelDebug
+	LevelDebug0   = slog.LevelDebug
 	LevelInfo     = slog.LevelInfo
 	LevelWarning  = slog.LevelWarn
 	LevelError    = slog.LevelError
@@ -53,14 +53,6 @@ var isInitalized bool
 // log level, used for printing of log entries
 var programLevel = new(slog.LevelVar) // Info by default
 
-// to change global logging level.
-//
-// TODO : Identify way to change the log level at runtime
-func ChangeGlobalLogLevel(level slog.Level) {
-	programLevel.Set(level)
-	fmt.Printf("[%s]:GLOBAL log level set to: [%s]\n", time.Now().UTC(), getLogLevelString(level))
-}
-
 // struct to manage 3 types of logger handles
 type LogHandles struct {
 	ActivityLogger   *slog.Logger
@@ -69,7 +61,7 @@ type LogHandles struct {
 }
 
 // struct for managing data change objects
-type DataChg struct {
+type dataChgObj struct {
 	Field  string `json:"field"`
 	OldVal string `json:"oldVal"`
 	NewVal string `json:"newVal"`
@@ -85,11 +77,16 @@ func init() {
 	ctx = context.Background()
 	buildInfo, _ := debug.ReadBuildInfo()
 	goRuntime = buildInfo.GoVersion
+	//Setting default log level of slog to lowest i.e. debug2 as printing of logs to slog will be managed by logHarbour
+	programLevel.Set(LevelDebug2)
 }
 
 // initializes logHarbour with app, module and system names.
 // Note that LogHarbour can only be initialized once.
 func LogInit(appName, moduleName, systemName string) LogHandles {
+	if len(appName) <= 0 || len(moduleName) <= 0 || len(systemName) <= 0 {
+		log.Fatalf("Invalid app name[%v], module name[%v] or system name[%v]", appName, moduleName, systemName)
+	}
 	//will allow initialization only once
 	if !isInitalized {
 		identity = appIdentifier{appName, moduleName, systemName}
@@ -97,7 +94,9 @@ func LogInit(appName, moduleName, systemName string) LogHandles {
 	}
 	return getLogger()
 }
-func getLogFileName() string {
+
+// func reads file name from config/env variable
+func getRigelLogFileName() string {
 	//TODO: read these parameters from config file
 	filename := "logfile"
 	filepath := "."
@@ -147,8 +146,8 @@ func getLogLevelString(level slog.Level) (levelString slog.Value) {
 		levelString = slog.StringValue(PRI_DEBUG2)
 	case level <= LevelDebug1:
 		levelString = slog.StringValue(PRI_DEBUG1)
-	case level <= LevelDebug:
-		levelString = slog.StringValue(PRI_DEBUG)
+	case level <= LevelDebug0:
+		levelString = slog.StringValue(PRI_DEBUG0)
 	case level <= slog.LevelInfo:
 		levelString = slog.StringValue(PRI_INFO)
 	case level <= LevelWarning:
@@ -169,7 +168,7 @@ var loggerSetInitialized = false
 // func returns 3 logHandles for ActivityLog, DatachangeLog and DebugLog
 func getLogger() LogHandles {
 	if !loggerSetInitialized {
-		logFile, err := os.OpenFile(getLogFileName(), os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
+		logFile, err := os.OpenFile(getRigelLogFileName(), os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
 		if err != nil {
 			panic(err)
 		}
@@ -188,8 +187,10 @@ func getLogger() LogHandles {
 }
 
 // func returns data change object
-func GetDataChg(field, oldVal, newVal string) DataChg {
-	return DataChg{field, oldVal, newVal}
+//
+// field: field name whose value is changing | oldVal: old value before data change | newVal: new value after data change
+func DataChg(field, oldVal, newVal string) dataChgObj {
+	return dataChgObj{field, oldVal, newVal}
 }
 
 // getFrame returns the runtime.Frame at the specified index.
@@ -244,25 +245,70 @@ func getCaller() string {
 	return file + ":" + strconv.Itoa(line)
 }
 
+func isTypeDataChg(t interface{}) bool {
+	switch t.(type) {
+	case dataChgObj:
+		return true
+	default:
+		return false
+	}
+}
+
 // func checks customMsgs of type Any to see if there is any data present in it. If no data is present, it returns an empty set of attribute.
-func checkCustomMsg(customMsgs ...any) slog.Attr {
+func checkCustomMsg(lgger *slog.Logger, customMsgs ...any) slog.Attr {
 	if len(customMsgs) > 0 {
-		return slog.Any("params", customMsgs)
+		if lgger.Handler() == loggerSet.DataChangeLogger.Handler() {
+			dco := make([]any, 0)
+			for _, val := range customMsgs {
+				if isTypeDataChg(val) {
+					dco = append(dco, val)
+				}
+			}
+			if len(dco) > 0 {
+				return slog.Any("params", dco)
+			} else {
+				return slog.Attr{}
+			}
+
+		} else {
+			otherAttribs := make([]any, 0)
+			for i := 0; i < len(customMsgs); i++ {
+				if !isTypeDataChg(customMsgs[i]) {
+					otherAttribs = append(otherAttribs, customMsgs[i])
+				}
+			}
+			if len(otherAttribs) > 0 {
+				return slog.Group("params", otherAttribs...)
+			} else {
+				return slog.Attr{}
+			}
+
+		}
 	} else {
 		return slog.Attr{}
 	}
 }
 
 // func writes log to specified source using slog
-func LogWrite(lgger *slog.Logger, ll slog.Level, spanId, correlationId, when, who, remoteIp, op, what string, status int, msg string, customMsgs ...any) {
+func LogWrite(lgger *slog.Logger, ll slog.Level, spanId, correlationId, when, who, remoteIp, op, whatClass, whatInstanceId string, status int, msg string, customMsgs ...any) {
 	if !isInitalized {
 		log.Fatalf("logHarbour not initialized. source[%s]. caller[%s]\n", getCallTrace(), getCaller())
 	}
 
-	if ll <= LevelDebug {
-		// In case of level of type Debug, additional information is passed to loggers
-		lgger.Log(ctx, ll, msg, slog.String("source", getCaller()), slog.String("callTrace", getCallTrace()), slog.String("spanId", spanId), slog.String("correlationId", correlationId), slog.String("when", when), slog.String("who", who), slog.String("remoteIp", remoteIp), slog.String("op", op), slog.String("what", what), slog.Int("status", status), checkCustomMsg(customMsgs...))
-	} else {
-		lgger.Log(ctx, ll, msg, slog.String("spanId", spanId), slog.String("correlationId", correlationId), slog.String("when", when), slog.String("who", who), slog.String("remoteIp", remoteIp), slog.String("op", op), slog.String("what", what), slog.Int("status", status), checkCustomMsg(customMsgs...))
+	if ll >= getRigelLogLevel() {
+		//as a part of optimization, here we are using "slog.String()" func calls as recommended
+		if ll <= LevelDebug0 {
+			// In case of level of type Debug, additional information is passed to loggers
+			lgger.LogAttrs(ctx, ll, msg, slog.String("source", getCaller()), slog.String("callTrace", getCallTrace()), slog.String("spanId", spanId), slog.String("correlationId", correlationId), slog.String("when", when), slog.String("who", who), slog.String("remoteIp", remoteIp), slog.String("op", op), slog.String("whatClass", whatClass), slog.String("whatInstanceId", whatInstanceId), slog.Int("status", status), checkCustomMsg(lgger, customMsgs...))
+		} else {
+			lgger.LogAttrs(ctx, ll, msg, slog.String("spanId", spanId), slog.String("correlationId", correlationId), slog.String("when", when), slog.String("who", who), slog.String("remoteIp", remoteIp), slog.String("op", op), slog.String("whatClass", whatClass), slog.String("whatInstanceId", whatInstanceId), slog.Int("status", status), checkCustomMsg(lgger, customMsgs...))
+		}
 	}
+}
+
+// TODO: STUB func to get log level from Rigel
+func getRigelLogLevel() slog.Level {
+	//TODO : change this with corresponding log level call from Rigel
+	//Else, by default, it returns the log level of slog
+	return programLevel.Level()
 }

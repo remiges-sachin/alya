@@ -3,6 +3,7 @@ package logHarbour
 
 import (
 	"context"
+	kafkaUtil "go-framework/kafkaUtil"
 	"io"
 	"log"
 	"log/slog"
@@ -91,6 +92,7 @@ func LogInit(appName, moduleName, systemName string) LogHandles {
 	if !isInitalized {
 		identity = appIdentifier{appName, moduleName, systemName}
 		isInitalized = true
+		kafkaUtil.KafkaInit(appName + ":" + moduleName + ":" + systemName) //TODO: discuss this
 	}
 	return getLogger()
 }
@@ -168,20 +170,27 @@ var loggerSetInitialized = false
 // func returns 3 logHandles for ActivityLog, DatachangeLog and DebugLog
 func getLogger() LogHandles {
 	if !loggerSetInitialized {
+		//create log file
 		logFile, err := os.OpenFile(getRigelLogFileName(), os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
 		if err != nil {
 			panic(err)
 		}
-		mw := io.MultiWriter(os.Stdout, logFile)
+		//create Kafka Writer
+		kafkaWriter := kafkaUtil.KafkaWriter{}
+		//create multiwriter for logger to write to log file, stdout and kafka
+		mw := io.MultiWriter(os.Stdout, logFile, kafkaWriter)
 
 		lg := slog.New(slog.NewJSONHandler(mw, &slog.HandlerOptions{Level: programLevel, ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 			return manageAttributes(a)
 		}})).With("app", identity.App).With("module", identity.Module).With("system", identity.System)
 
+		//create child loggers
 		loggerSet = LogHandles{
 			ActivityLogger:   lg.With("handle", ACTIVITY_LOGGER),
 			DataChangeLogger: lg.With("handle", DATACHANGE_LOGGER),
-			DebugLogger:      lg.With("handle", DEBUG_LOGGER).With(slog.Int("pid", os.Getpid())).With(slog.String("goVersion", goRuntime))}
+			//Here for debugLogger we can write pid and goruntime while creating handler.
+			//However for calltrace() methods will be used while logging to capture correct call trace and source
+			DebugLogger: lg.With("handle", DEBUG_LOGGER).With(slog.Int("pid", os.Getpid())).With(slog.String("goVersion", goRuntime))}
 	}
 	return loggerSet
 }
@@ -297,6 +306,8 @@ func LogWrite(lgger *slog.Logger, ll slog.Level, spanId, correlationId, when, wh
 
 	if ll >= getRigelLogLevel() {
 		//as a part of optimization, here we are using "slog.String()" func calls as recommended
+		//TODO: check for field "when" cannot be a future time.
+		//But currently we are taking it as a string, we'll be forced to take it as a time object. Need to discuss
 		if ll <= LevelDebug0 {
 			// In case of level of type Debug, additional information is passed to loggers
 			lgger.LogAttrs(ctx, ll, msg, slog.String("source", getCaller()), slog.String("callTrace", getCallTrace()), slog.String("spanId", spanId), slog.String("correlationId", correlationId), slog.String("when", when), slog.String("who", who), slog.String("remoteIp", remoteIp), slog.String("op", op), slog.String("whatClass", whatClass), slog.String("whatInstanceId", whatInstanceId), slog.Int("status", status), checkCustomMsg(lgger, customMsgs...))

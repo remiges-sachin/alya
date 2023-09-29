@@ -190,7 +190,7 @@ func getLogger() LogHandles {
 			DataChangeLogger: lg.With("handle", DATACHANGE_LOGGER),
 			//Here for debugLogger we can write pid and goruntime while creating handler.
 			//However for calltrace() methods will be used while logging to capture correct call trace and source
-			DebugLogger: lg.With("handle", DEBUG_LOGGER).With(slog.Int("pid", os.Getpid())).With(slog.String("goVersion", goRuntime))}
+			DebugLogger: lg.With("handle", DEBUG_LOGGER).With(slog.Int("pid", os.Getpid())).With(slog.String("runtime", goRuntime))}
 	}
 	return loggerSet
 }

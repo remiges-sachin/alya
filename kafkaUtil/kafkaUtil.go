@@ -23,7 +23,7 @@ func KafkaInit(appName, moduleName, systemName string) {
 	logId = []byte(appName + "_" + moduleName + "_" + systemName)
 	programLevel.Set(0) //TODO refer to constants
 	initDefaultLogger(appName, moduleName, systemName)
-	//kafkaStart()
+	kafkaStart()
 }
 
 func initDefaultLogger(appName, moduleName, systemName string) {

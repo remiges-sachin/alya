@@ -378,7 +378,7 @@ func LogWrite(lgger *slog.Logger, ll slog.Level, spanId, correlationId string, w
 		t := time.Now()
 		if t.Before(when) {
 			defaultLogger.Error("Error in log message:", "LOG_MSG", lm)
-			defaultLogger.Error("LOG_MSG_ERR: when cannot be after current time.", "currentTime", t, "when", when)
+			defaultLogger.Error("LOG_MSG_ERR: 'when' cannot be after system current time.", "currentTime", t, "when", when)
 			return
 		}
 

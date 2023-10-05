@@ -12,6 +12,8 @@ import (
 	"runtime/debug"
 	"strconv"
 	"time"
+
+	"github.com/go-playground/validator/v10"
 )
 
 const (
@@ -56,16 +58,16 @@ var programLevel = new(slog.LevelVar) // Info by default
 
 // struct to manage 3 types of logger handles
 type LogHandles struct {
-	ActivityLogger   *slog.Logger
-	DataChangeLogger *slog.Logger
-	DebugLogger      *slog.Logger
+	ActivityLogger   *slog.Logger // ActivityLogger   : Logging of all activities/events/anything
+	DataChangeLogger *slog.Logger // DataChangeLogger : Logging of data changes i.e. a field chaging its value from x to y
+	DebugLogger      *slog.Logger // DebugLogger      : Logging of debug messages. To be used by developers in case of issues
 }
 
 // struct for managing data change objects
 type dataChgObj struct {
-	Field  string `json:"field"`
-	OldVal string `json:"oldVal"`
-	NewVal string `json:"newVal"`
+	Field  string `json:"field"`  //field that is changing for e.g. "amount"
+	OldVal string `json:"oldVal"` //old value of the field that is changing for e.g. "100"
+	NewVal string `json:"newVal"` //new value of the field that is changing for e.g. "200"
 }
 
 // logHarbour Context
@@ -74,12 +76,30 @@ var ctx context.Context
 // go runtime version
 var goRuntime string
 
+// default logger will be used to write to stdout in case of errors while writing to normal logs
+var defaultLogger *slog.Logger
+
+// validator is used to validate fields of log message
+var validate *validator.Validate
+
 func init() {
 	ctx = context.Background()
 	buildInfo, _ := debug.ReadBuildInfo()
 	goRuntime = buildInfo.GoVersion
 	//Setting default log level of slog to lowest i.e. debug2 as printing of logs to slog will be managed by logHarbour
 	programLevel.Set(LevelDebug2)
+	validate = validator.New()
+}
+
+func initDefaultLogger() {
+	logFile, err := os.OpenFile(getRigelLogFileName(), os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
+	if err != nil {
+		panic(err)
+	}
+	mw := io.MultiWriter(os.Stdout, logFile)
+	defaultLogger = slog.New(slog.NewJSONHandler(mw, &slog.HandlerOptions{Level: programLevel, ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+		return manageAttributes(a)
+	}})).With("handle", "DEFAULT_LOGGER").With("app", identity.App).With("module", identity.Module).With("system", identity.System)
 }
 
 // initializes logHarbour with app, module and system names.
@@ -92,12 +112,13 @@ func LogInit(appName, moduleName, systemName string) LogHandles {
 	if !isInitalized {
 		identity = appIdentifier{appName, moduleName, systemName}
 		isInitalized = true
-		kafkaUtil.KafkaInit(appName + ":" + moduleName + ":" + systemName) //TODO: discuss this
+		kafkaUtil.KafkaInit(appName, moduleName, systemName) //TODO: discuss this
 	}
 	return getLogger()
 }
 
 // func reads file name from config/env variable
+// TODO : discuss this
 func getRigelLogFileName() string {
 	//TODO: read these parameters from config file
 	filename := "logfile"
@@ -179,7 +200,6 @@ func getLogger() LogHandles {
 		kafkaWriter := kafkaUtil.KafkaWriter{}
 		//create multiwriter for logger to write to log file, stdout and kafka
 		mw := io.MultiWriter(os.Stdout, logFile, kafkaWriter)
-
 		lg := slog.New(slog.NewJSONHandler(mw, &slog.HandlerOptions{Level: programLevel, ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 			return manageAttributes(a)
 		}})).With("app", identity.App).With("module", identity.Module).With("system", identity.System)
@@ -192,6 +212,8 @@ func getLogger() LogHandles {
 			//However for calltrace() methods will be used while logging to capture correct call trace and source
 			DebugLogger: lg.With("handle", DEBUG_LOGGER).With(slog.Int("pid", os.Getpid())).With(slog.String("runtime", goRuntime))}
 	}
+	//initialize default logger that will be used in case of errors
+	initDefaultLogger()
 	return loggerSet
 }
 
@@ -298,21 +320,74 @@ func checkCustomMsg(lgger *slog.Logger, customMsgs ...any) slog.Attr {
 	}
 }
 
+type logMsg struct {
+	Lgger          *slog.Logger `validate:"required"`
+	Ll             string       `validate:"required"`
+	SpanId         string       `validate:"required,min=1"`
+	CorrelationId  string       `validate:"required,min=1"`
+	When           time.Time    `validate:"required"`
+	Who            string       `validate:"required,min=1"`
+	RemoteIp       string       `validate:"required,ip_addr"`
+	Op             string       `validate:"required,min=1"`
+	WhatClass      string       `validate:"required,min=1"`
+	WhatInstanceId string       `validate:"required,min=1"`
+	Status         int          `validate:"required"`
+	Msg            string       `validate:"required,min=1"`
+	CustomMsgs     any
+}
+
 // func writes log to specified source using slog
-func LogWrite(lgger *slog.Logger, ll slog.Level, spanId, correlationId, when, who, remoteIp, op, whatClass, whatInstanceId string, status int, msg string, customMsgs ...any) {
+func LogWrite(lgger *slog.Logger, ll slog.Level, spanId, correlationId string, when time.Time, who, remoteIp, op, whatClass, whatInstanceId string, status int, msg string, customMsgs ...any) {
 	if !isInitalized {
 		log.Fatalf("logHarbour not initialized. source[%s]. caller[%s]\n", getCallTrace(), getCaller())
 	}
 
 	if ll >= getRigelLogLevel() {
+		//Validations
+		lm := logMsg{
+			Lgger:          lgger,
+			Ll:             ll.String(),
+			SpanId:         spanId,
+			CorrelationId:  correlationId,
+			When:           when,
+			Who:            who,
+			RemoteIp:       remoteIp,
+			Op:             op,
+			WhatClass:      whatClass,
+			WhatInstanceId: whatInstanceId,
+			Status:         status,
+			Msg:            msg,
+			CustomMsgs:     customMsgs,
+		}
+
+		err := validate.Struct(lm)
+		if err != nil {
+			defaultLogger.Error("Error in log message:", "LOG_MSG", lm)
+			for _, err := range err.(validator.ValidationErrors) {
+				if err.Tag() == "required" {
+					defaultLogger.Error("LOG_MSG_ERR:", err.Field(), err.Tag(), "found", err.Value())
+				} else {
+					defaultLogger.Error("LOG_MSG_ERR:", "found", err.Value(), "needed in "+err.Field(), err.Tag())
+				}
+
+			}
+			return
+		}
+
+		//the field "when" cannot be in future
+		t := time.Now()
+		if t.Before(when) {
+			defaultLogger.Error("Error in log message:", "LOG_MSG", lm)
+			defaultLogger.Error("LOG_MSG_ERR: when cannot be after current time.", "currentTime", t, "when", when)
+			return
+		}
+
 		//as a part of optimization, here we are using "slog.String()" func calls as recommended
-		//TODO: check for field "when" cannot be a future time.
-		//But currently we are taking it as a string, we'll be forced to take it as a time object. Need to discuss
 		if ll <= LevelDebug0 {
 			// In case of level of type Debug, additional information is passed to loggers
-			lgger.LogAttrs(ctx, ll, msg, slog.String("source", getCaller()), slog.String("callTrace", getCallTrace()), slog.String("spanId", spanId), slog.String("correlationId", correlationId), slog.String("when", when), slog.String("who", who), slog.String("remoteIp", remoteIp), slog.String("op", op), slog.String("whatClass", whatClass), slog.String("whatInstanceId", whatInstanceId), slog.Int("status", status), checkCustomMsg(lgger, customMsgs...))
+			lgger.LogAttrs(ctx, ll, msg, slog.String("source", getCaller()), slog.String("callTrace", getCallTrace()), slog.String("spanId", spanId), slog.String("correlationId", correlationId), slog.Time("when", when), slog.String("who", who), slog.String("remoteIp", remoteIp), slog.String("op", op), slog.String("whatClass", whatClass), slog.String("whatInstanceId", whatInstanceId), slog.Int("status", status), checkCustomMsg(lgger, customMsgs...))
 		} else {
-			lgger.LogAttrs(ctx, ll, msg, slog.String("spanId", spanId), slog.String("correlationId", correlationId), slog.String("when", when), slog.String("who", who), slog.String("remoteIp", remoteIp), slog.String("op", op), slog.String("whatClass", whatClass), slog.String("whatInstanceId", whatInstanceId), slog.Int("status", status), checkCustomMsg(lgger, customMsgs...))
+			lgger.LogAttrs(ctx, ll, msg, slog.String("spanId", spanId), slog.String("correlationId", correlationId), slog.Time("when", when), slog.String("who", who), slog.String("remoteIp", remoteIp), slog.String("op", op), slog.String("whatClass", whatClass), slog.String("whatInstanceId", whatInstanceId), slog.Int("status", status), checkCustomMsg(lgger, customMsgs...))
 		}
 	}
 }

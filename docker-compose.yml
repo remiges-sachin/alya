@@ -24,3 +24,4 @@ services:
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
 
 #command-> sudo docker compose up -d
+#

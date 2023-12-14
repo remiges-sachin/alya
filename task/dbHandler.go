@@ -4,8 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	db "github.com/remiges-tech/alya/task/pg/sqlc-gen"
 	"github.com/sqlc-dev/pqtype"
-	db "go-framework/task/pg/sqlc-gen"
 	"time"
 )
 

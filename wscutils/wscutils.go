@@ -164,3 +164,13 @@ func SendSuccessResponse(c *gin.Context, response *Response) {
 func SendErrorResponse(c *gin.Context, response *Response) {
 	c.JSON(http.StatusBadRequest, response)
 }
+
+// SendSuccessData sends a success response with given data.
+func SendData(c *gin.Context, data any) {
+	c.JSON(http.StatusOK, NewSuccessResponse(data))
+}
+
+// SendErrors sends a success response with given data.
+func SendErrors(c *gin.Context, messages []ErrorMessage) {
+	c.JSON(http.StatusOK, NewResponse(ErrorStatus, nil, messages))
+}

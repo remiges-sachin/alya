@@ -35,6 +35,7 @@ func HandleCreateUserRequest(c *gin.Context, s *service.Service) {
 	validationErrors := wscutils.WscValidate(createUserReq, func(err validator.FieldError) []string { return []string{} })
 	if len(validationErrors) > 0 {
 		wscutils.SendErrorResponse(c, wscutils.NewResponse(wscutils.ErrorStatus, nil, validationErrors))
+		wscutils.SendErrors(c, validationErrors)
 		return
 	}
 	s.Logger.Log(fmt.Sprintf("CreateUser request validated %v", map[string]any{"username": createUserReq.Name}))
@@ -52,4 +53,5 @@ func HandleCreateUserRequest(c *gin.Context, s *service.Service) {
 
 	// Send response
 	wscutils.SendSuccessResponse(c, wscutils.NewSuccessResponse(user))
+	wscutils.SendData(c, user)
 }

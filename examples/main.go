@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -149,6 +151,19 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to register sqlc.Queries: %v", err)
 	}
+
+	// Listen for interrupt signals
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+
+	// Start a goroutine that will close the container when an interrupt signal is received
+	go func() {
+		<-c
+		if err := container.Close(); err != nil {
+			log.Fatalf("Failed to close container: %v", err)
+		}
+		os.Exit(0)
+	}()
 
 	// Create a new service for /users
 	userService := service.NewService(r).WithContainer(container).WithLogHarbour(lh)

@@ -46,6 +46,32 @@ func Load(cs Config, c any) error {
 type File struct {
 	ConfigFilePath string
 	Config         map[string]interface{}
+	file           *os.File
+}
+
+func (f *File) Init() error {
+	var err error
+
+	// Open the file
+	f.file, err = os.Open(f.ConfigFilePath)
+	if err != nil {
+		return err
+	}
+
+	// Decode the file into the Config map
+	err = json.NewDecoder(f.file).Decode(&f.Config)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (f *File) Close() error {
+	if f.file != nil {
+		return f.file.Close()
+	}
+	return nil
 }
 
 func (f *File) Check() error {

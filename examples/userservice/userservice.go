@@ -23,13 +23,13 @@ type CreateUserRequest struct {
 }
 
 func HandleCreateUserRequest(c *gin.Context, s *service.Service) {
-	s.Logger.Log("CreateUser request received")
+	s.LogHarbour.Log("CreateUser request received")
 	// Parse request
 	var createUserReq CreateUserRequest
 	if err := wscutils.BindJSON(c, &createUserReq); err != nil {
 		return
 	}
-	s.Logger.Log(fmt.Sprintf("CreateUser request parsed: %v", map[string]any{"username": createUserReq.Name}))
+	s.LogHarbour.Log(fmt.Sprintf("CreateUser request parsed: %v", map[string]any{"username": createUserReq.Name}))
 
 	// Validate request
 	validationErrors := wscutils.WscValidate(createUserReq, func(err validator.FieldError) []string { return []string{} })
@@ -37,10 +37,26 @@ func HandleCreateUserRequest(c *gin.Context, s *service.Service) {
 		wscutils.SendErrorResponse(c, wscutils.NewResponse(wscutils.ErrorStatus, nil, validationErrors))
 		return
 	}
-	s.Logger.Log(fmt.Sprintf("CreateUser request validated %v", map[string]any{"username": createUserReq.Name}))
+	s.LogHarbour.Log(fmt.Sprintf("CreateUser request validated %v", map[string]any{"username": createUserReq.Name}))
 
 	// Call CreateUser function
-	user, err := s.Database.(*sqlc.Queries).CreateUser(c.Request.Context(), sqlc.CreateUserParams{
+
+	// Resolve the database from the container
+	dbObj, err := s.Container.Resolve("database")
+	if err != nil {
+		// Handle error
+		return
+	}
+
+	// Assert that the dbObj implements the *alya.Queries interface
+	db, ok := dbObj.(*sqlc.Queries)
+	if !ok {
+		// Handle error
+		return
+	}
+
+	// Use db to call the CreateUser function
+	user, err := db.CreateUser(c.Request.Context(), sqlc.CreateUserParams{
 		Name:  createUserReq.Name,
 		Email: createUserReq.Email,
 	})
@@ -48,7 +64,7 @@ func HandleCreateUserRequest(c *gin.Context, s *service.Service) {
 		wscutils.SendErrorResponse(c, wscutils.NewErrorResponse(wscutils.ErrcodeDatabaseError))
 		return
 	}
-	s.Logger.Log(fmt.Sprintf("User created: %v", map[string]any{"username": createUserReq.Name}))
+	s.LogHarbour.Log(fmt.Sprintf("User created: %v", map[string]any{"username": createUserReq.Name}))
 
 	// Send response
 	wscutils.SendSuccessResponse(c, wscutils.NewSuccessResponse(user))

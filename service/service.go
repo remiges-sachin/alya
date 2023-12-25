@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/remiges-tech/alya/config"
+	"github.com/remiges-tech/alya/container"
 	"github.com/remiges-tech/alya/logger"
 	"github.com/remiges-tech/logharbour/logharbour"
 	"github.com/remiges-tech/rigel"
@@ -41,6 +42,7 @@ type Dependencies map[string]any
 //
 //	s := NewService(router).WithLogger(logger).WithDatabase(db)
 type Service struct {
+	Container    *container.Container
 	Config       config.Config
 	RigelConfig  *rigel.Rigel
 	Router       *gin.Engine
@@ -53,8 +55,15 @@ type Service struct {
 // NewService constructs a new Service with the given configuration, router, and options.
 func NewService(r *gin.Engine) *Service {
 	s := &Service{
-		Router: r,
+		Router:    r,
+		Container: container.NewContainer(),
 	}
+	return s
+}
+
+// WithContainer is a method to inject a container dependency into the Service.
+func (s *Service) WithContainer(c *container.Container) *Service {
+	s.Container = c
 	return s
 }
 
@@ -95,6 +104,10 @@ func (s *Service) WithLogHarbour(l *logharbour.Logger) *Service {
 // WithDatabase is a method to inject a database dependency into the Service.
 func (s *Service) WithDatabase(db any) *Service {
 	s.Database = db
+	err := s.Container.Register("database", db)
+	if err != nil {
+		log.Fatalf("Failed to register database: %v", err)
+	}
 	return s
 }
 

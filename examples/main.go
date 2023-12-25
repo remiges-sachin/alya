@@ -10,7 +10,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/remiges-tech/alya"
 	"github.com/remiges-tech/alya/config"
+	"github.com/remiges-tech/alya/container"
 	"github.com/remiges-tech/alya/examples/pg"
 	usersvc "github.com/remiges-tech/alya/examples/userservice"
 	"github.com/remiges-tech/alya/logger"
@@ -117,8 +119,39 @@ func main() {
 	// Register routes
 	helloService.RegisterRoute(http.MethodGet, "/hello", handleHelloRequest)
 
+	// container
+
+	// Create a new container
+	container := container.NewContainer()
+
+	// Create a File config object
+	fileConfig, err := config.NewFile("/tmp/config.json")
+	if err != nil {
+		log.Fatalf("Failed to create file config: %v", err)
+	}
+
+	// Register the config with the container
+	err = container.Register("config", fileConfig)
+	if err != nil {
+		log.Fatalf("Failed to register config: %v", err)
+	}
+
+	// Create a new SQLCService
+	sqlcService := alya.NewSQLCService(container)
+
+	// Initialize the SQLCService
+	if err := sqlcService.Init(); err != nil {
+		log.Fatalf("Failed to initialize SQLCService: %v", err)
+	}
+
+	// Register the sqlc.Queries with the container
+	err = container.Register("queries", sqlcService.Queries)
+	if err != nil {
+		log.Fatalf("Failed to register sqlc.Queries: %v", err)
+	}
+
 	// Create a new service for /users
-	userService := service.NewService(r).WithLogHarbour(lh)
+	userService := service.NewService(r).WithContainer(container).WithLogHarbour(lh)
 
 	// set up database connection
 	pgConfig := pg.Config{
